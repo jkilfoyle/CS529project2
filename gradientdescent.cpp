@@ -17,7 +17,7 @@ typedef pair<int,double> Pair;
 
 
 default_random_engine generator;
-uniform_real_distribution<double> distribution (0.0, 1.0);
+uniform_real_distribution<double> distribution (0.0, 0.00001);
 
 map<string, int> wordids;
 map<string, int> labelids;
@@ -148,7 +148,7 @@ public:
         vector<Object> nextvec (M.row);
         for (int i = 0;i < M.row; i ++)
         {
-            auto rowvec = M.entries[i];
+            vector<Object> rowvec = M.entries[i];
             double val = fast_product_sum<Object> (vec, rowvec);
             nextvec[i] = Pair (i, val);
         }
@@ -215,7 +215,7 @@ void print_log_likelihood (vector<double> Y, Matrix<double> weights, sparseMatri
 void gradient_descent (int m, int k, int n, double eta, double lambda, Matrix<double> delta, sparseMatrix<Pair> X, vector<double> Y,
                        Matrix<double> weights, Matrix<double> prob)
 {
-    int iterations = 10000; //number of iterations of gradient descent
+    int iterations = 100000; //number of iterations of gradient descent
     
     vector<pair<int,int> > classification;
     
@@ -236,18 +236,40 @@ void gradient_descent (int m, int k, int n, double eta, double lambda, Matrix<do
         
         //number of ell values is m (the number of training examples)
         
+        
         for (int j = 0; j + 1 < numKlass; j ++)
         {
             double denom = 0;
+            
+            int maxID = 0;
+            for (int ell = 0; ell < m; ell++)
+                if (xW[j].vec[ell].second > xW[j].vec[maxID].second)
+                    maxID = ell;
+            
+            swap (xW[j].vec[maxID], xW[j].vec[0]);
+            
             for (int ell = 0; ell < m; ell++)
                     denom = denom + exp (xW[j].vec[ell].second - xW[j].vec[0].second);
             
+            double denom2 = 1.0/exp(xW[j].vec[0].second);
+            
+            prob.entries[j][0] = 1.0/(denom + denom2);
+            
+            cout << prob.entries[j][0] << " " << j << " max "<<denom<<" " <<denom2<<" "<<xW[j].vec[0].second<<endl;
+            
+            //denominator changed to log
+            denom = log (denom);
+
             for (int ell = 1; ell < m; ell++)
             {
-                denom = denom * exp (xW[j].vec[ell-1].second - xW[j].vec[ell].second);
-                double denom2 = 1.0/exp(xW[j].vec[ell].second);
-                prob.entries[j][ell] = 1.0/(denom + denom2);
+                denom = denom + (xW[j].vec[ell-1].second - xW[j].vec[ell].second);
+                
+                denom2 = 1.0/exp(xW[j].vec[ell].second);
+                prob.entries[j][ell] = 1.0/(exp(denom) + denom2);
             }
+            
+            swap (xW[j].vec[maxID], xW[j].vec[0]);
+            swap (prob.entries[j][maxID], prob.entries[j][0]);
         }
         
         for (int ell = 0; ell < m; ell++)
@@ -259,30 +281,35 @@ void gradient_descent (int m, int k, int n, double eta, double lambda, Matrix<do
             prob.entries[numKlass-1][ell] = 1 - sum;
         }
         
+        
         if (iter == 0){
+        /*    cout <<"Probabilities ";
+            for (int j = 0;j < numKlass; j++)
+                cout << prob.entries[j][20] << " ";
+            cout <<"Weights and vectors ";
             for (int ell = 0; ell < min(m,100); ell ++)
-                cout << prob.entries[0][ell] << " " <<xW[0].vec[ell].second<< endl;
-            cout << endl;
+                cout <<weights.entries[10][ell]<< " " << xW[15].vec[ell].second<< endl;
+            cout << endl; */
         }
    
         
         for (int j = 0;j < numKlass; j ++)
         {
-            for (int idx = 0; idx < weights.col ; idx ++)
-                weights.entries[j][idx] = weights.entries[j][idx] - lambda * eta * weights.entries[j][idx];
             for (int ell = 0; ell < m; ell ++)
             {
                 for (int idx = 0; idx < X.entries[ell].size(); idx ++)
                 {
                     double Xiell = X.entries[ell][idx].second ;
-                    weights.entries[j][ X.entries[ell][idx].first ] = weights.entries[j][ X.entries[ell][idx].first ] + eta * Xiell * (delta.entries[j][ell] -  exp(prob.entries[j][ell]));
+                    weights.entries[j][ X.entries[ell][idx].first ] = weights.entries[j][ X.entries[ell][idx].first ] + eta * Xiell * (delta.entries[j][ell] - prob.entries[j][ell]);
                 }
             }
+            for (int idx = 0; idx < weights.col ; idx ++)
+                weights.entries[j][idx] = weights.entries[j][idx] - lambda * eta * weights.entries[j][idx];
+           
         }
         
-        cout <<"Running iteration "<<iter;
-        if (iter > 1000)
-            print_log_likelihood (Y,weights,X, prob, classification);
+        cout <<"Running iteration "<<iter<<endl;
+        print_log_likelihood (Y,weights,X, prob, classification);
     }
     
     return ;
@@ -454,7 +481,7 @@ void take_word_input ()
 void take_training_input ()
 {
     int k, m , n;
-    double eta = 0.001, lambda = 0.001 ;
+    double eta = 1, lambda = 0.01 ;
     
     k = 20; //number of classes in training.csv
     n = 61188;
@@ -468,7 +495,7 @@ void take_training_input ()
     vector<int> docIds;
     vector<double> docClass;
     
-    while (fgets (buffer, MAXSTR, in) && M.size () < 500){ //take the first 500 documents
+    while (fgets (buffer, MAXSTR, in) && M.size () < 50){ //take the first 50 documents
         char *token = strtok (buffer, ",");
         int idx = 0;
         while (token)
@@ -517,7 +544,7 @@ void take_training_input ()
     
     for (int i = 0;i < k; i ++)
         for (int j = 0;j <= n; j ++)
-            weights.entries[i][j] = gaussian (generator);
+            weights.entries[i][j] = distribution (generator);
     
     int totalvalidentries = 0;
     

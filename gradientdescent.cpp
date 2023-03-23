@@ -16,6 +16,9 @@ const int MAXSTR = 1000000;
 typedef pair<int,double> Pair;
 
 
+default_random_engine generator;
+uniform_real_distribution<double> distribution (0.0, 1.0);
+
 map<string, int> wordids;
 map<string, int> labelids;
 
@@ -169,6 +172,31 @@ double get_Xiell (sparseMatrix<Pair> X, int i, int ell)
     return iter -> second ;
 }*/
 
+void print_log_likelihood (vector<double> Y, Matrix<double> weights, sparseMatrix<Pair> X)
+{
+    int numKlass = weights.row ;
+    vector<fastVector<Pair> > xW;
+    for (int j = 0;j < numKlass; j ++)
+    {
+        fastVector<Pair> fastweight (weights.col);
+        for (int idx = 0; idx < weights.col; idx ++)
+            fastweight.vec[idx] = Pair(idx,weights.entries[j][idx]);
+        
+        fastVector<Pair> wiXi = fastweight * X ;
+        
+        xW.push_back (wiXi);
+    }
+    
+    for (int j = 0; j < numKlass; j++)
+    {
+        double sum = 0;
+        for (int ell = 0; ell < X.row; ell ++)
+            sum = sum + Y[ell] *  (xW[j].vec[ell].second) - log (1 + exp (xW[j].vec[ell].second));
+        
+        cout <<" class "<<j << " "<<sum<<endl;
+    }
+}
+
 
 void gradient_descent (int m, int k, int n, double eta, double lambda, Matrix<double> delta, sparseMatrix<Pair> X, vector<double> Y,
                        Matrix<double> weights, Matrix<double> prob)
@@ -181,8 +209,6 @@ void gradient_descent (int m, int k, int n, double eta, double lambda, Matrix<do
         vector<fastVector<Pair> > xW;
         for (int j = 0;j < numKlass; j ++)
         {
-            cout << "Running class #"<<j << endl;
-            
             fastVector<Pair> fastweight (weights.col);
             for (int idx = 0; idx < weights.col; idx ++)
                 fastweight.vec[idx] = Pair(idx,weights.entries[j][idx]);
@@ -203,14 +229,16 @@ void gradient_descent (int m, int k, int n, double eta, double lambda, Matrix<do
                 denominator[ell] = denominator[ell] + exp (xW[j].vec[ell].second);
         }
         
+        //Probabilities are logged.
+        
         for (int j = 0; j + 1 < numKlass; j ++)
         {
             for (int ell = 0; ell < m; ell++)
-                prob.entries[j][ell] = exp (xW[j].vec[ell].second) / denominator[ell];
+                prob.entries[j][ell] = xW[j].vec[ell].second - log (denominator[ell]);
         }
         
         for (int ell = 0; ell < m; ell++)
-            prob.entries[numKlass-1][ell] = 1.0 / denominator[ell];
+            prob.entries[numKlass-1][ell] = - log (denominator[ell]);
    
         
         for (int j = 0;j < numKlass; j ++)
@@ -222,10 +250,13 @@ void gradient_descent (int m, int k, int n, double eta, double lambda, Matrix<do
                 for (int idx = 0; idx < X.entries[ell].size(); idx ++)
                 {
                     double Xiell = X.entries[ell][idx].second ;
-                    weights.entries[j][ X.entries[ell][idx].first ] = weights.entries[j][ X.entries[ell][idx].first ] + eta * Xiell * (delta.entries[j][ell] - prob.entries[j][ell]);
+                    weights.entries[j][ X.entries[ell][idx].first ] = weights.entries[j][ X.entries[ell][idx].first ] + eta * Xiell * (delta.entries[j][ell] -  exp(prob.entries[j][ell]));
                 }
             }
         }
+        
+        cout <<"Running iteration "<<iter <<" and log conditional likehood is ";
+        print_log_likelihood (Y,weights,X);
     }
     
     return ;
@@ -264,6 +295,48 @@ void test_code_matrix ()
     print_out <double> (M1);
     print_out <double> (M2);
     print_out <double> (M);
+    
+    return ;
+}
+
+
+/*
+ 
+ https://stackoverflow.com/questions/35419882/cost-function-in-logistic-regression-gives-nan-as-a-result
+ 
+ */
+
+template<class Object>
+void normalize (sparseMatrix<Object>& X)
+{
+    double mean = 0, std = 1;
+    
+    for (int j = 0;j < X.entries[0].size(); j ++)
+        X.entries[0][j].second = (X.entries[0][j].second - mean) / std;
+    
+    for (int ell = 1; ell < X.row; ell++)
+    {
+        mean = 0 ;
+        
+        for (int j = 0;j < X.entries[ell].size (); j ++)
+            mean = mean + X.entries[ell][j].second ;
+        
+        mean = mean / 61188;
+        
+        std = 0;
+        
+        for (int j = 0;j < X.entries[ell].size (); j ++)
+            std = std + (X.entries[ell][j].second - mean) * (X.entries[ell][j].second - mean);
+        
+        int valentries = X.entries[ell].size ();
+        
+        std = std + (61188 - valentries) * mean * mean;
+        std = std / 61188;
+        std = sqrt (std);
+        
+        for (int j = 0;j < X.entries[ell].size(); j ++)
+            X.entries[ell][j].second = (X.entries[ell][j].second - mean) / std;
+    }
     
     return ;
 }
@@ -350,7 +423,7 @@ void take_word_input ()
 void take_training_input ()
 {
     int k, m , n;
-    double eta = 0.1, lambda = 1 ;
+    double eta = 0.01, lambda = 0.01 ;
     
     k = 20; //number of classes in training.csv
     n = 61188;
@@ -409,9 +482,11 @@ void take_training_input ()
     
     fclose (in);
     
+    normal_distribution<double> gaussian (0.0, sqrt (1/lambda));
+    
     for (int i = 0;i < k; i ++)
         for (int j = 0;j <= n; j ++)
-            weights.entries[i][j] = 0;
+            weights.entries[i][j] = gaussian (generator);
     
     int totalvalidentries = 0;
     
@@ -433,6 +508,8 @@ void take_training_input ()
                 delta.entries[yj][ell] = 0;
         }
     }
+    
+    normalize (X);
     
     gradient_descent (m, k, n, eta, lambda, delta, X, Y, weights, probability);
     

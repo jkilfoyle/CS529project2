@@ -180,41 +180,35 @@ void gradient_descent (int m, int k, int n, double eta, double lambda, sparseMat
         int numKlass = weights.row ;
         for (int j = 0;j < numKlass; j ++)
         {
-            for (int i = 0;i < weights.col ; i ++)
+            cout << "Running class #"<<j << endl;
+            
+            fastVector<Pair> fastweight (weights.col);
+            for (int idx = 0; idx < weights.col; idx ++)
+                fastweight.vec[idx] = Pair(idx,weights.entries[j][idx]);
+            
+            fastVector<Pair> wiXi = fastweight * X ;
+            
+            vector<double> prob_y0_X (wiXi.len);
+            vector<double> prob_y1_X (wiXi.len);
+            
+            //number of ell values is m (the number of training examples)
+            
+            for (int ell = 0;ell < wiXi.len; ell ++)
             {
-                vector<int> sweepid (m, 0);
-                fastVector<Pair> fastweight (weights.col);
-                for (int idx = 0; idx < weights.col; idx ++)
-                    fastweight.vec[idx] = Pair(i,weights.entries[j][i]);
-                
-                fastVector<Pair> wiXi = fastweight * X ;
-                
-                vector<double> prob_y0_X (wiXi.len);
-                vector<double> prob_y1_X (wiXi.len);
-                
-                //number of ell values is m (the number of training examples)
-                
-                for (int ell = 0;ell < wiXi.len; ell ++)
+                prob_y0_X[ell] = 1 / (1 + exp (wiXi.vec[ell].second));
+                prob_y1_X[ell] = exp (wiXi.vec[ell].second) / (1 + exp(wiXi.vec[ell].second));
+            }
+            
+            for (int ell = 0; ell < wiXi.len; ell ++)
+            {
+                for (int idx = 0; idx < X.entries[ell].size(); idx ++)
                 {
-                    prob_y0_X[ell] = 1 / (1 + exp (wiXi.vec[ell].second));
-                    prob_y1_X[ell] = exp (wiXi.vec[ell].second) / (1 + exp(wiXi.vec[ell].second));
-                }
-                
-                double sum_Xell_Yell = 0;
-                
-                for (int ell = 0; ell < wiXi.len; ell ++)
-                {
-                    double Yell = Y[ell];
-                    double Xiell = 0;
-                    while (sweepid[ell] < X.entries[ell].size() && X.entries[ell][sweepid[ell]].first < i) sweepid[ell]++;
-                    if (sweepid[ell] < X.entries[ell].size() && X.entries[ell][sweepid[ell]].first == i) Xiell = X.entries[ell][sweepid[ell]].second;
-                    weights.entries[j][i] = weights.entries[j][i] + eta * (Xiell * (Yell - prob_y1_X[ell]));
+                    double Xiell = X.entries[ell][idx].second ;
+                    weights.entries[j][ X.entries[ell][idx].first ] = weights.entries[j][ X.entries[ell][idx].first ] + eta * Xiell * (Y[ell] - prob_y1_X[ell]);
                 }
             }
-            cout << "Running class #"<<j << endl;
         }
     }
-
     
     return ;
 }
@@ -400,6 +394,16 @@ void take_training_input ()
     for (int i = 0;i < k; i ++)
         for (int j = 0;j <= n; j ++)
             weights.entries[i][j] = 0;
+    
+    int totalvalidentries = 0;
+    
+    for (int i = 0 ;i < m; i ++)
+    {
+  //      cout <<"Non zero valid entries in row "<<i<< " is "<< X.entries[i].size()<<endl;
+        totalvalidentries = totalvalidentries + X.entries[i].size ();
+    }
+    
+    cout << "total number of valid entries is " << totalvalidentries << endl;
     
     gradient_descent (m, k, n, eta, lambda, delta, X, Y, weights, probability);
     

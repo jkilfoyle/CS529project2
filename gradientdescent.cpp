@@ -172,7 +172,7 @@ double get_Xiell (sparseMatrix<Pair> X, int i, int ell)
     return iter -> second ;
 }*/
 
-void print_log_likelihood (vector<double> Y, Matrix<double> weights, sparseMatrix<Pair> X)
+void print_log_likelihood (vector<double> Y, Matrix<double> weights, sparseMatrix<Pair> X, Matrix<double> prob)
 {
     int numKlass = weights.row ;
     vector<fastVector<Pair> > xW;
@@ -195,6 +195,19 @@ void print_log_likelihood (vector<double> Y, Matrix<double> weights, sparseMatri
         
         cout <<" class "<<j << " "<<sum<<endl;
     }
+    
+    for (int ell = 0; ell < X.row; ell ++)
+    {
+        int klass = 0;
+        for (int j  = 0; j < numKlass; j ++)
+        {
+            if (prob.entries[j][ell] > prob.entries[klass][ell])
+                klass = j ;
+        }
+        cout <<"Example " << ell << " is classified to be " <<klass<<endl;
+    }
+    
+    return ;
 }
 
 
@@ -239,6 +252,12 @@ void gradient_descent (int m, int k, int n, double eta, double lambda, Matrix<do
         
         for (int ell = 0; ell < m; ell++)
             prob.entries[numKlass-1][ell] = - log (denominator[ell]);
+        
+        if (iter == 0){
+            for (int ell = 0; ell < 100; ell ++)
+                cout << prob.entries[numKlass-1][ell] << " " <<denominator[ell]<< endl;
+            cout << endl;
+        }
    
         
         for (int j = 0;j < numKlass; j ++)
@@ -256,7 +275,7 @@ void gradient_descent (int m, int k, int n, double eta, double lambda, Matrix<do
         }
         
         cout <<"Running iteration "<<iter <<" and log conditional likehood is ";
-        print_log_likelihood (Y,weights,X);
+        print_log_likelihood (Y,weights,X, prob);
     }
     
     return ;
@@ -311,10 +330,10 @@ void normalize (sparseMatrix<Object>& X)
 {
     double mean = 0, std = 1;
     
-    for (int j = 0;j < X.entries[0].size(); j ++)
-        X.entries[0][j].second = (X.entries[0][j].second - mean) / std;
+    //for (int j = 0;j < X.entries[0].size(); j ++)
+      //  X.entries[0][j].second = (X.entries[0][j].second - mean) / std;
     
-    for (int ell = 1; ell < X.row; ell++)
+    for (int ell = 0; ell < X.row; ell++)
     {
         mean = 0 ;
         

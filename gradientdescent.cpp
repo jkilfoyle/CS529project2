@@ -170,14 +170,15 @@ double get_Xiell (sparseMatrix<Pair> X, int i, int ell)
 }*/
 
 
-void gradient_descent (int m, int k, int n, double eta, double lambda, sparseMatrix<Pair> delta, sparseMatrix<Pair> X, vector<double> Y,
-                       Matrix<double> weights, Matrix<double> probability)
+void gradient_descent (int m, int k, int n, double eta, double lambda, Matrix<double> delta, sparseMatrix<Pair> X, vector<double> Y,
+                       Matrix<double> weights, Matrix<double> prob)
 {
     int iterations = 50; //number of iterations of gradient descent
     
     for (int iter = 0; iter < iterations; iter ++)
     {
         int numKlass = weights.row ;
+        vector<fastVector<Pair> > xW;
         for (int j = 0;j < numKlass; j ++)
         {
             cout << "Running class #"<<j << endl;
@@ -187,6 +188,8 @@ void gradient_descent (int m, int k, int n, double eta, double lambda, sparseMat
                 fastweight.vec[idx] = Pair(idx,weights.entries[j][idx]);
             
             fastVector<Pair> wiXi = fastweight * X ;
+            
+            xW.push_back (wiXi);
             
             vector<double> prob_y0_X (wiXi.len);
             vector<double> prob_y1_X (wiXi.len);
@@ -198,13 +201,36 @@ void gradient_descent (int m, int k, int n, double eta, double lambda, sparseMat
                 prob_y0_X[ell] = 1 / (1 + exp (wiXi.vec[ell].second));
                 prob_y1_X[ell] = exp (wiXi.vec[ell].second) / (1 + exp(wiXi.vec[ell].second));
             }
-            
-            for (int ell = 0; ell < wiXi.len; ell ++)
+        }
+        
+        vector<double> denominator (m, 1);
+        
+        for (int j = 0;j + 1 < numKlass; j++)
+        {
+            for (int ell = 0; ell < m; ell ++)
+                denominator[ell] = denominator[ell] + exp (xW[j].vec[ell].second);
+        }
+        
+        for (int j = 0; j + 1 < numKlass; j ++)
+        {
+            for (int ell = 0; ell < m; ell++)
+                prob.entries[j][ell] = exp (xW[j].vec[ell].second) / denominator[ell];
+        }
+        
+        for (int ell = 0; ell < m; ell++)
+            prob.entries[numKlass-1][ell] = 1.0 / denominator[ell];
+   
+        
+        for (int j = 0;j < numKlass; j ++)
+        {
+            for (int idx = 0; idx < weights.col ; idx ++)
+                weights.entries[j][idx] = weights.entries[j][idx] - lambda * eta * weights.entries[j][idx];
+            for (int ell = 0; ell < m; ell ++)
             {
                 for (int idx = 0; idx < X.entries[ell].size(); idx ++)
                 {
                     double Xiell = X.entries[ell][idx].second ;
-                    weights.entries[j][ X.entries[ell][idx].first ] = weights.entries[j][ X.entries[ell][idx].first ] + eta * Xiell * (Y[ell] - prob_y1_X[ell]);
+                    weights.entries[j][ X.entries[ell][idx].first ] = weights.entries[j][ X.entries[ell][idx].first ] + eta * Xiell * (delta.entries[ell][j] - prob.entries[j][ell]);
                 }
             }
         }
@@ -383,7 +409,7 @@ void take_training_input ()
     Matrix<double> probability (k,m);
     */
     
-    sparseMatrix<Pair> delta (k,m);
+    Matrix<double> delta (k,m);
     sparseMatrix<Pair> X (M);
     vector<double> Y (docClass);
     Matrix<double> weights (k, n + 1);
@@ -404,6 +430,17 @@ void take_training_input ()
     }
     
     cout << "total number of valid entries is " << totalvalidentries << endl;
+
+    for (int yj = 0;yj < k; yj++)
+    {
+        for (int ell = 0; ell < m; ell++)
+        {
+            if (Y[ell] == yj + 1)
+                delta.entries[yj][ell] = 1;
+            else
+                delta.entries[yj][ell] = 0;
+        }
+    }
     
     gradient_descent (m, k, n, eta, lambda, delta, X, Y, weights, probability);
     

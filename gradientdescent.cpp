@@ -172,8 +172,11 @@ double get_Xiell (sparseMatrix<Pair> X, int i, int ell)
     return iter -> second ;
 }*/
 
-void print_log_likelihood (vector<double> Y, Matrix<double> weights, sparseMatrix<Pair> X, Matrix<double> prob)
+void print_log_likelihood (vector<double> Y, Matrix<double> weights, sparseMatrix<Pair> X, Matrix<double> prob, vector<pair<int,int> >& classification)
 {
+    
+    classification.erase (classification.begin(), classification.end());
+    
     int numKlass = weights.row ;
     vector<fastVector<Pair> > xW;
     for (int j = 0;j < numKlass; j ++)
@@ -187,6 +190,8 @@ void print_log_likelihood (vector<double> Y, Matrix<double> weights, sparseMatri
         xW.push_back (wiXi);
     }
     
+    //this part does not consider the penalty term
+    /*
     for (int j = 0; j < numKlass; j++)
     {
         double sum = 0;
@@ -194,7 +199,9 @@ void print_log_likelihood (vector<double> Y, Matrix<double> weights, sparseMatri
             sum = sum + Y[ell] *  (xW[j].vec[ell].second) - log (1 + exp (xW[j].vec[ell].second));
         
         cout <<" class "<<j << " "<<sum<<endl;
-    }
+    }*/
+    
+    int countcorrect = 0;
     
     for (int ell = 0; ell < X.row; ell ++)
     {
@@ -204,8 +211,14 @@ void print_log_likelihood (vector<double> Y, Matrix<double> weights, sparseMatri
             if (prob.entries[j][ell] > prob.entries[klass][ell])
                 klass = j ;
         }
-        cout <<"Example " << ell << " is classified to be " <<klass<<endl;
+       // cout <<"Example " << ell << " is classified to be " <<klass<<endl;
+        classification.push_back (pair<int,int> (ell, klass));
+        
+        if (klass == Y[ell])
+            countcorrect ++;
     }
+    
+    cout <<"Percentage of correct classification " << countcorrect * 100.0 / X.row << endl;
     
     return ;
 }
@@ -214,7 +227,9 @@ void print_log_likelihood (vector<double> Y, Matrix<double> weights, sparseMatri
 void gradient_descent (int m, int k, int n, double eta, double lambda, Matrix<double> delta, sparseMatrix<Pair> X, vector<double> Y,
                        Matrix<double> weights, Matrix<double> prob)
 {
-    int iterations = 50; //number of iterations of gradient descent
+    int iterations = 1000; //number of iterations of gradient descent
+    
+    vector<pair<int,int> > classification;
     
     for (int iter = 0; iter < iterations; iter ++)
     {
@@ -255,7 +270,7 @@ void gradient_descent (int m, int k, int n, double eta, double lambda, Matrix<do
         
         if (iter == 0){
             for (int ell = 0; ell < 100; ell ++)
-                cout << prob.entries[numKlass-1][ell] << " " <<denominator[ell]<< endl;
+                cout << prob.entries[0][ell] << " " <<log(denominator[ell])<<" "<<xW[0].vec[ell].second<< endl;
             cout << endl;
         }
    
@@ -274,8 +289,8 @@ void gradient_descent (int m, int k, int n, double eta, double lambda, Matrix<do
             }
         }
         
-        cout <<"Running iteration "<<iter <<" and log conditional likehood is ";
-        print_log_likelihood (Y,weights,X, prob);
+        cout <<"Running iteration "<<iter;
+        print_log_likelihood (Y,weights,X, prob, classification);
     }
     
     return ;
@@ -442,7 +457,7 @@ void take_word_input ()
 void take_training_input ()
 {
     int k, m , n;
-    double eta = 0.01, lambda = 0.01 ;
+    double eta = 0.001, lambda = 0.01 ;
     
     k = 20; //number of classes in training.csv
     n = 61188;
@@ -501,7 +516,7 @@ void take_training_input ()
     
     fclose (in);
     
-    normal_distribution<double> gaussian (0.0, sqrt (1/lambda));
+    normal_distribution<double> gaussian (0.0, 0.0001);
     
     for (int i = 0;i < k; i ++)
         for (int j = 0;j <= n; j ++)

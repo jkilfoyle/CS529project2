@@ -234,38 +234,42 @@ void test_code_sparseMatrix ()
     return ;
 }
 
-void take_wordlabel_input ()
+void take_label_input ()
 {
-    FILE *in = fopen ("vocabulary.txt", "r");
+    FILE *in = fopen ("newsgrouplabels.txt", "r");
     
     char buffer[50];
-    
-    while (fscanf (in, "%s", buffer) != EOF)
-    {
-        char word [50];
-        int id ;
-        sscanf (buffer, "%s %d", word, &id);
-        
-        string w (word);
-        
-        wordids[w] = id;
-        
-    }
-    
-    fclose (in);
-    
-    in = fopen ("newsgrouplabels.txt","r");
-    
+
     while (fscanf (in, "%s", buffer) != EOF)
     {
         char label [50];
         int id ;
         sscanf (buffer, "%d %s", &id, label);
         
-        string  s(label);
+        string s(label);
         
         labelids[s] = id;
     }
+    
+    fclose (in);
+    
+    return ;
+}
+
+void take_word_input ()
+{
+    FILE *in = fopen ("vocabulary.txt", "r");
+    
+    char buffer[500];
+    int id = 0; //word ids are 0 based
+    
+    while (fscanf (in, "%s", buffer) != EOF)
+    {
+        string word (buffer);
+        wordids[word] = id++;
+    }
+    
+    cout << "Dictionary size is " << wordids.size () << endl;
     
     fclose (in);
     
@@ -341,7 +345,8 @@ int main()
     test_code_matrix ();
     test_code_sparseMatrix ();
     
-    take_wordlabel_input ();
+    take_word_input ();
+    take_label_input ();
     take_training_input ();
 
     return 0;

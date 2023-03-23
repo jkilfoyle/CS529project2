@@ -190,20 +190,12 @@ void gradient_descent (int m, int k, int n, double eta, double lambda, Matrix<do
             fastVector<Pair> wiXi = fastweight * X ;
             
             xW.push_back (wiXi);
-            
-            vector<double> prob_y0_X (wiXi.len);
-            vector<double> prob_y1_X (wiXi.len);
-            
-            //number of ell values is m (the number of training examples)
-            
-            for (int ell = 0;ell < wiXi.len; ell ++)
-            {
-                prob_y0_X[ell] = 1 / (1 + exp (wiXi.vec[ell].second));
-                prob_y1_X[ell] = exp (wiXi.vec[ell].second) / (1 + exp(wiXi.vec[ell].second));
-            }
         }
         
         vector<double> denominator (m, 1);
+        
+        //number of ell values is m (the number of training examples)
+
         
         for (int j = 0;j + 1 < numKlass; j++)
         {

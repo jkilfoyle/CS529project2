@@ -12,26 +12,36 @@
 using namespace std;
 
 const int MAXSTR = 1000000;
+const int NORMALIZED = 1 ;
 
 typedef pair<int,double> Pair;
 
 
 default_random_engine generator;
-uniform_real_distribution<double> distribution (0.0, 0.00001);
+uniform_real_distribution<double> distribution (0, 1);
 
 map<string, int> wordids;
 map<string, int> labelids;
 
 
 template<class Object>
-double fast_product_sum (vector<Object>& A, vector<Object>& B)
+double fast_product_sum (vector<Object>& A, vector<Object>& B, double totalA)
 {
     double sum = 0;
-    int j = 0;
+    double mean = 0, std = 1;
+    int j = NORMALIZED;
+    
+    if (NORMALIZED)
+    {
+        mean = B[0].first ;
+        std = B[0].second ;
+        sum = -totalA * mean/std;
+        sum = sum + A[0].second; //w0 here
+    }
     
     while (j < B.size())
     {
-        sum = sum + A[B[j].first].second * B[j].second ;
+        sum = sum + (A[B[j].first].second + A[B[j].first].second * mean/std * NORMALIZED) * B[j].second ;
         j ++;
     }
     
@@ -146,10 +156,13 @@ public:
     fastVector operator*(const sparseMatrix<Object>& M)
     {
         vector<Object> nextvec (M.row);
+        double totalA = 0;
+        for (int i = 0;i < len; i ++)
+            totalA = totalA + vec[i].second;
         for (int i = 0;i < M.row; i ++)
         {
             vector<Object> rowvec = M.entries[i];
-            double val = fast_product_sum<Object> (vec, rowvec);
+            double val = fast_product_sum<Object> (vec, rowvec, totalA);
             nextvec[i] = Pair (i, val);
         }
         return nextvec;
@@ -234,6 +247,7 @@ void gradient_descent (int m, int k, int n, double eta, double lambda, Matrix<do
             xW.push_back (wiXi);
         }
         
+        //O(nk)
         //number of ell values is m (the number of training examples)
         
         
@@ -267,10 +281,15 @@ void gradient_descent (int m, int k, int n, double eta, double lambda, Matrix<do
                 denom2 = 1.0/exp(xW[j].vec[ell].second);
                 prob.entries[j][ell] = 1.0/(exp(denom) + denom2);
             }
+           
+            cout << prob.entries[j][5] << " " << j << " max2 "<<denom<<" " <<denom2<<" "<<xW[j].vec[5].second<<endl;
+           
             
             swap (xW[j].vec[maxID], xW[j].vec[0]);
             swap (prob.entries[j][maxID], prob.entries[j][0]);
         }
+        
+        //O(km)
         
         for (int ell = 0; ell < m; ell++)
         {
@@ -281,6 +300,7 @@ void gradient_descent (int m, int k, int n, double eta, double lambda, Matrix<do
             prob.entries[numKlass-1][ell] = 1 - sum;
         }
         
+        //O(km)
         
         if (iter == 0){
         /*    cout <<"Probabilities ";
@@ -295,17 +315,44 @@ void gradient_descent (int m, int k, int n, double eta, double lambda, Matrix<do
         
         for (int j = 0;j < numKlass; j ++)
         {
+            for (int idx = 0; idx < weights.col ; idx ++)
+                weights.entries[j][idx] = weights.entries[j][idx] - lambda * eta * weights.entries[j][idx];
+            double deltaprobsum = 0;
+            for (int ell = 0; ell < m; ell ++){
+                double mean = 0, std = 1;
+                if (NORMALIZED)
+                {
+                    mean = X.entries[ell][0].first ;
+                    std = X.entries[ell][0].second ;
+                }
+                deltaprobsum = deltaprobsum + (delta.entries[j][ell] - prob.entries[j][ell]) * (-mean/std) * NORMALIZED;
+            }
+            
+            deltaprobsum = deltaprobsum * eta ;
+            
+            for (int idx = 0; idx < weights.col; idx ++)
+                weights.entries[j][idx] = weights.entries[j][idx] + deltaprobsum;
+            
             for (int ell = 0; ell < m; ell ++)
             {
                 for (int idx = 0; idx < X.entries[ell].size(); idx ++)
                 {
                     double Xiell = X.entries[ell][idx].second ;
+                    double adjustment = 0 ;
                     weights.entries[j][ X.entries[ell][idx].first ] = weights.entries[j][ X.entries[ell][idx].first ] + eta * Xiell * (delta.entries[j][ell] - prob.entries[j][ell]);
+                    if (NORMALIZED)
+                    {
+                        double mean = 0, std = 1;
+                        mean = X.entries[ell][0].first ;
+                        std = X.entries[ell][0].second ;
+                        
+                        adjustment = (delta.entries[j][ell] - prob.entries[j][ell]) * (mean/std) * NORMALIZED * eta;
+                        weights.entries[j][ X.entries[ell][idx].first ] += adjustment;
+                    }
                 }
             }
-            for (int idx = 0; idx < weights.col ; idx ++)
-                weights.entries[j][idx] = weights.entries[j][idx] - lambda * eta * weights.entries[j][idx];
-           
+            
+            //O(km + total valid entry)
         }
         
         cout <<"Running iteration "<<iter<<endl;
@@ -374,7 +421,7 @@ void normalize (sparseMatrix<Object>& X)
         for (int j = 0;j < X.entries[ell].size (); j ++)
             mean = mean + X.entries[ell][j].second ;
         
-        mean = mean / 61188;
+        mean = mean / 61189;
         
         std = 0;
         
@@ -383,8 +430,8 @@ void normalize (sparseMatrix<Object>& X)
         
         int valentries = X.entries[ell].size ();
         
-        std = std + (61188 - valentries) * mean * mean;
-        std = std / 61188;
+        std = std + (61189 - valentries) * mean * mean;
+        std = std / 61189;
         std = sqrt (std);
         
         for (int j = 0;j < X.entries[ell].size(); j ++)
@@ -398,6 +445,52 @@ void normalize (sparseMatrix<Object>& X)
     
     return ;
 }
+
+
+
+template<class Object, class Object2>
+void initialize_weights (sparseMatrix<Object>& X, Matrix<Object2>& weights, vector<double>& Y)
+{
+    double mean = 0, std = 1;
+    
+    //for (int j = 0;j < X.entries[0].size(); j ++)
+      //  X.entries[0][j].second = (X.entries[0][j].second - mean) / std;
+    
+      for (int i = 0;i < 20; i ++)
+          for (int j = 0;j < X.col; j ++)
+              weights.entries[i][j] = distribution (generator);
+    
+    for (int ell = 0; ell < X.row; ell++)
+    {
+        mean = 0 ;
+        
+        for (int j = 0;j < X.entries[ell].size (); j ++)
+            mean = mean + X.entries[ell][j].second ;
+        
+        mean = mean / 61189;
+        
+        std = 0;
+        
+        for (int j = 0;j < X.entries[ell].size (); j ++)
+            std = std + (X.entries[ell][j].second - mean) * (X.entries[ell][j].second - mean);
+        
+        int valentries = X.entries[ell].size ();
+        
+        std = std + (61189 - valentries) * mean * mean;
+        std = std / 61189;
+        std = sqrt (std);
+        
+        normal_distribution<double> gaussian (mean, std);
+        
+        for (int j = 0; j < X.col; j++)
+        {
+            weights.entries[(int)Y[ell]][j] = gaussian (generator);
+        }
+    }
+    
+    return ;
+}
+
 
 template<class Object>
 void print_fastVector (fastVector<Object>& weights)
@@ -481,7 +574,7 @@ void take_word_input ()
 void take_training_input ()
 {
     int k, m , n;
-    double eta = 1, lambda = 0.01 ;
+    double eta = 0.01, lambda = 0.001 ;
     
     k = 20; //number of classes in training.csv
     n = 61188;
@@ -540,11 +633,11 @@ void take_training_input ()
     
     fclose (in);
     
-    normal_distribution<double> gaussian (0.0, 0.00001);
+    normal_distribution<double> gaussian (0.0, 0.1);
     
     for (int i = 0;i < k; i ++)
         for (int j = 0;j <= n; j ++)
-            weights.entries[i][j] = distribution (generator);
+            weights.entries[i][j] = 0;
     
     int totalvalidentries = 0;
     
@@ -567,7 +660,9 @@ void take_training_input ()
         }
     }
     
-   // normalize (X);
+    //initialize_weights <Pair, double> (X,weights,Y);
+    if (NORMALIZED)
+        normalize (X);
     
     gradient_descent (m, k, n, eta, lambda, delta, X, Y, weights, probability);
     

@@ -13,6 +13,7 @@ using namespace std;
 
 const int MAXSTR = 1000000;
 const int NORMALIZED = 1 ;
+const double maxVAL = 100;
 
 typedef pair<int,double> Pair;
 
@@ -185,21 +186,32 @@ double get_Xiell (sparseMatrix<Pair> X, int i, int ell)
     return iter -> second ;
 }*/
 
-void print_log_likelihood (vector<double> Y, Matrix<double> weights, sparseMatrix<Pair> X, Matrix<double> prob, vector<pair<int,int> >& classification)
+double normsq (vector<double>& w)
+{
+    double norm = 0;
+    for (auto weight : w)
+        norm = norm + weight * weight;
+    
+    return norm;
+}
+
+//prints out the value of the function being optimized and the document classifications.
+
+void print_log_likelihood (vector<double> Y, Matrix<double> weights, sparseMatrix<Pair> X, Matrix<double> prob, vector<pair<int,int> >& classification, double lambda,
+                           vector<fastVector<Pair> > xW)
 {
     classification.erase (classification.begin(), classification.end());
     
     int numKlass = weights.row ;
-    vector<fastVector<Pair> > xW;
+    
     for (int j = 0;j < numKlass; j ++)
     {
-        fastVector<Pair> fastweight (weights.col);
-        for (int idx = 0; idx < weights.col; idx ++)
-            fastweight.vec[idx] = Pair(idx,weights.entries[j][idx]);
-        
-        fastVector<Pair> wiXi = fastweight * X ;
-        
-        xW.push_back (wiXi);
+        double funcVal = 0;
+        for (int ell = 0; ell < X.row; ell ++)
+        {
+            funcVal = funcVal + log (prob.entries[j][ell]);// - lambda / 2 * normsq (weights.entries[j]);
+        }
+        cout << "Optimization value for class "<<j << " "<<funcVal<<endl;
     }
     
     int countcorrect = 0;
@@ -220,6 +232,44 @@ void print_log_likelihood (vector<double> Y, Matrix<double> weights, sparseMatri
     }
     
     cout <<"Percentage of correct classification " << countcorrect * 100.0 / X.row << endl;
+    
+    return ;
+}
+
+pair<double,double> get_mean_std (vector<double>& v)
+{
+    double mean = 0;
+    
+    for (auto val : v)
+        mean = mean + val;
+    
+    mean /= v.size ();
+    
+    double std = 0;
+    
+    for (auto val : v)
+        std = std + (val - mean) * (val - mean);
+    
+    std /= v.size ();
+    
+    return pair<double,double> (mean, std) ;
+}
+
+
+template<class Object>
+void normalize (Matrix<Object>& X)
+{
+  
+    for (int j = 0;j < X.row; j++)
+    {
+        pair<double, double> ms = get_mean_std (X.entries[j]);
+        //remove the below two lines if normal distribution is to be used
+        ms.first = 0;
+        ms.second = maxVAL;
+        
+        for (int i = 0; i < X.col; i++)
+            X.entries[j][i] = (X.entries[j][i] - ms.first) / ms.second;
+    }
     
     return ;
 }
@@ -269,7 +319,7 @@ void gradient_descent (int m, int k, int n, double eta, double lambda, Matrix<do
             
             prob.entries[j][0] = 1.0/(denom + denom2);
             
-            cout << prob.entries[j][0] << " " << j << " max "<<denom<<" " <<denom2<<" "<<xW[j].vec[0].second<<endl;
+         //   cout << prob.entries[j][0] << " " << j << " max "<<denom<<" " <<denom2<<" "<<xW[j].vec[0].second<<endl;
             
             //denominator changed to log
             denom = log (denom);
@@ -282,7 +332,7 @@ void gradient_descent (int m, int k, int n, double eta, double lambda, Matrix<do
                 prob.entries[j][ell] = 1.0/(exp(denom) + denom2);
             }
            
-            cout << prob.entries[j][5] << " " << j << " max2 "<<denom<<" " <<denom2<<" "<<xW[j].vec[5].second<<endl;
+         //   cout << prob.entries[j][5] << " " << j << " max2 "<<denom<<" " <<denom2<<" "<<xW[j].vec[5].second<<endl;
            
             
             swap (xW[j].vec[maxID], xW[j].vec[0]);
@@ -311,14 +361,16 @@ void gradient_descent (int m, int k, int n, double eta, double lambda, Matrix<do
                 cout <<weights.entries[10][ell]<< " " << xW[15].vec[ell].second<< endl;
             cout << endl; */
         }
-   
+           
         
         for (int j = 0;j < numKlass; j ++)
         {
             for (int idx = 0; idx < weights.col ; idx ++)
-                weights.entries[j][idx] = weights.entries[j][idx] - lambda * eta * weights.entries[j][idx];
+                weights.entries[j][idx] = weights.entries[j][idx] - eta * weights.entries[j][idx] * lambda;
+            
             double deltaprobsum = 0;
-            for (int ell = 0; ell < m; ell ++){
+            for (int ell = 0; ell < m; ell ++)
+            {
                 double mean = 0, std = 1;
                 if (NORMALIZED)
                 {
@@ -328,6 +380,7 @@ void gradient_descent (int m, int k, int n, double eta, double lambda, Matrix<do
                 deltaprobsum = deltaprobsum + (delta.entries[j][ell] - prob.entries[j][ell]) * (-mean/std) * NORMALIZED;
             }
             
+            //maybe divide by m in addition to lambda to manage overfitting
             deltaprobsum = deltaprobsum * eta ;
             
             for (int idx = 0; idx < weights.col; idx ++)
@@ -339,7 +392,7 @@ void gradient_descent (int m, int k, int n, double eta, double lambda, Matrix<do
                 {
                     double Xiell = X.entries[ell][idx].second ;
                     double adjustment = 0 ;
-                    weights.entries[j][ X.entries[ell][idx].first ] = weights.entries[j][ X.entries[ell][idx].first ] + eta * Xiell * (delta.entries[j][ell] - prob.entries[j][ell]);
+                    weights.entries[j][ X.entries[ell][idx].first ] = weights.entries[j][ X.entries[ell][idx].first ] + eta * Xiell * (delta.entries[j][ell] - prob.entries[j][ell]) ;
                     if (NORMALIZED)
                     {
                         double mean = 0, std = 1;
@@ -352,11 +405,16 @@ void gradient_descent (int m, int k, int n, double eta, double lambda, Matrix<do
                 }
             }
             
+            
             //O(km + total valid entry)
         }
         
+      //  if (iter % 5 == 0)
+      //      normalize (weights);
+      //  cout<<"Weights look like "<<weights.entries[0][0]<<" "<<weights.entries[0][weights.col - 1]<<endl;
+        
         cout <<"Running iteration "<<iter<<endl;
-        print_log_likelihood (Y,weights,X, prob, classification);
+        print_log_likelihood (Y,weights,X, prob, classification, lambda, xW);
     }
     
     return ;
@@ -574,7 +632,7 @@ void take_word_input ()
 void take_training_input ()
 {
     int k, m , n;
-    double eta = 0.01, lambda = 0.001 ;
+    double eta = 0.01, lambda = 0 ;
     
     k = 20; //number of classes in training.csv
     n = 61188;
@@ -633,11 +691,11 @@ void take_training_input ()
     
     fclose (in);
     
-    normal_distribution<double> gaussian (0.0, 0.1);
+    normal_distribution<double> gaussian (0.0, 0.00001);
     
     for (int i = 0;i < k; i ++)
         for (int j = 0;j <= n; j ++)
-            weights.entries[i][j] = 0;
+            weights.entries[i][j] = gaussian (generator);
     
     int totalvalidentries = 0;
     
@@ -663,6 +721,8 @@ void take_training_input ()
     //initialize_weights <Pair, double> (X,weights,Y);
     if (NORMALIZED)
         normalize (X);
+    
+    lambda = lambda ;
     
     gradient_descent (m, k, n, eta, lambda, delta, X, Y, weights, probability);
     

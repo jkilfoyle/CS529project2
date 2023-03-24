@@ -632,7 +632,7 @@ void take_word_input ()
 void take_training_input ()
 {
     int k, m , n;
-    double eta = 0.01, lambda = 0 ;
+    double eta = 0.01, lambda = 0.01 ;
     
     k = 20; //number of classes in training.csv
     n = 61188;
@@ -691,7 +691,7 @@ void take_training_input ()
     
     fclose (in);
     
-    normal_distribution<double> gaussian (0.0, 0.00001);
+    normal_distribution<double> gaussian (0.0, 1);
     
     for (int i = 0;i < k; i ++)
         for (int j = 0;j <= n; j ++)
@@ -722,7 +722,7 @@ void take_training_input ()
     if (NORMALIZED)
         normalize (X);
     
-    lambda = lambda ;
+    lambda = lambda;
     
     gradient_descent (m, k, n, eta, lambda, delta, X, Y, weights, probability);
     

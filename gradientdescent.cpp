@@ -14,8 +14,8 @@ using namespace std;
 const int MAXSTR = 1000000;
 const int NORMALIZED = 1 ;
 const int N = 61189;
-vector<double> maxVAL (N, 1);
-vector<double> minVal (N, 1e20);
+vector<double> maxVAL (N, 700);
+vector<double> minVal (N, 0);
 
 typedef pair<int,double> Pair;
 
@@ -183,7 +183,7 @@ double normsq (vector<double>& w)
 
 //prints out the value of the function being optimized and the document classifications.
 
-void print_log_likelihood (vector<double> Y, Matrix<double> weights, sparseMatrix<Pair> X, Matrix<double> prob, vector<pair<int,int> >& classification, double lambda,
+double print_log_likelihood (vector<double> Y, Matrix<double> weights, sparseMatrix<Pair> X, Matrix<double> prob, vector<pair<int,int> >& classification, double lambda,
                            vector<fastVector<Pair> > xW)
 {
     classification.erase (classification.begin(), classification.end());
@@ -211,7 +211,7 @@ void print_log_likelihood (vector<double> Y, Matrix<double> weights, sparseMatri
     }
     
     printf ("\n Percentage of correct classification, %lf \n", countcorrect * 100.0/ X.row );
-    return ;
+    return countcorrect * 100.0 / X.row;
 }
 
 pair<double,double> get_mean_std (vector<double>& v)
@@ -324,6 +324,15 @@ void gradient_descent (int m, int k, int n, double eta, double lambda, Matrix<do
         }
         //O(km)
         
+        
+        cout <<"Running iteration "<<iter<<endl;
+        double accuracy = print_log_likelihood (Y,weights,X, prob, classification, lambda, xW);
+    /*    if (accuracy > 80.0)
+        {
+            eta = 0.001;
+            lambda = 0.001;
+        }
+      */
         for (int j = 0;j < numKlass; j ++)
         {
             for (int idx = 0; idx < weights.col ; idx ++)
@@ -351,9 +360,6 @@ void gradient_descent (int m, int k, int n, double eta, double lambda, Matrix<do
             cout<<weights.entries[0][weights.col - j - 1]<<" ";
         
         cout << endl;
-        
-        cout <<"Running iteration "<<iter<<endl;
-        print_log_likelihood (Y,weights,X, prob, classification, lambda, xW);
     }
     
     return ;
@@ -557,7 +563,7 @@ void take_training_input ()
     vector<int> docIds;
     vector<double> docClass;
     
-    while (fgets (buffer, MAXSTR, in) && M.size () < 400){ //take the first 50 documents
+    while (fgets (buffer, MAXSTR, in)){ //take the first 50 documents
         char *token = strtok (buffer, ",");
         int idx = 0;
         while (token)
@@ -575,7 +581,7 @@ void take_training_input ()
         for (int j = 1;j + 1 < values.size (); j ++)
         {
             maxVAL[j] = max (maxVAL[j], values[j].second * 1.0);
-            minVal[j] = min (minVal[j], values[j].second * 1.0);
+        //    minVal[j] = min (minVal[j], values[j].second * 1.0);
           
             if (values[j].second)
                 columnVec.push_back (Pair (j,values[j].second));

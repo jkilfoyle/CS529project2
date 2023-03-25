@@ -569,7 +569,7 @@ void take_training_input ()
         }
         
         vector<Pair> columnVec ;
-        columnVec.push_back (Pair(0,1.0/600));
+        columnVec.push_back (Pair(0,1.0));
         minVal[0] = 0;
         docIds.push_back (values[0].second);
         for (int j = 1;j + 1 < values.size (); j ++)

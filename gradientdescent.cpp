@@ -13,13 +13,16 @@ using namespace std;
 
 const int MAXSTR = 1000000;
 const int NORMALIZED = 1 ;
-const double maxVAL = 100;
+const int N = 61189;
+vector<double> maxVAL (N, 1);
+vector<double> minVal (N, 1e20);
 
 typedef pair<int,double> Pair;
 
 
 default_random_engine generator;
 uniform_real_distribution<double> distribution (0, 1);
+normal_distribution<double> normal (0.0, 1);
 
 map<string, int> wordids;
 map<string, int> labelids;
@@ -29,20 +32,11 @@ template<class Object>
 double fast_product_sum (vector<Object>& A, vector<Object>& B, double totalA)
 {
     double sum = 0;
-    double mean = 0, std = 1;
-    int j = NORMALIZED;
-    
-    if (NORMALIZED)
-    {
-        mean = B[0].first ;
-        std = B[0].second ;
-        sum = -totalA * mean/std;
-        sum = sum + A[0].second; //w0 here
-    }
+    int j = 0;
     
     while (j < B.size())
     {
-        sum = sum + (A[B[j].first].second + A[B[j].first].second * mean/std * NORMALIZED) * B[j].second ;
+        sum = sum + A[B[j].first].second * B[j].second ;
         j ++;
     }
     
@@ -177,14 +171,6 @@ vector<double> Y (m);
 Matrix<double> weights (k, n + 1);
 Matrix<double> probability (k,m);
 */
-/*
-double get_Xiell (sparseMatrix<Pair> X, int i, int ell)
-{
-    vector<Pair>::iterator iter = lower_bound (X.entries[ell].begin(), X.entries[ell].end(), Pair (i,0));
-    if (iter == X.entries[ell].end())
-        return 0;
-    return iter -> second ;
-}*/
 
 double normsq (vector<double>& w)
 {
@@ -203,18 +189,9 @@ void print_log_likelihood (vector<double> Y, Matrix<double> weights, sparseMatri
     classification.erase (classification.begin(), classification.end());
     
     int numKlass = weights.row ;
-    
-    for (int j = 0;j < numKlass; j ++)
-    {
-        double funcVal = 0;
-        for (int ell = 0; ell < X.row; ell ++)
-        {
-            funcVal = funcVal + log (prob.entries[j][ell]);// - lambda / 2 * normsq (weights.entries[j]);
-        }
-        cout << "Optimization value for class "<<j << " "<<funcVal<<endl;
-    }
-    
     int countcorrect = 0;
+    
+    cout << "First few probabilities ";
     
     for (int ell = 0; ell < X.row; ell ++)
     {
@@ -227,12 +204,13 @@ void print_log_likelihood (vector<double> Y, Matrix<double> weights, sparseMatri
        // cout <<"Example " << ell << " is classified to be " <<klass<<endl;
         classification.push_back (pair<int,int> (ell, klass));
         
+        if (ell < 5)
+            cout << prob.entries[klass][ell]<<" ";
         if (abs(klass - Y[ell]) < 1e-9)
             countcorrect ++;
     }
     
-    cout <<"Percentage of correct classification " << countcorrect * 100.0 / X.row << endl;
-    
+    printf ("\n Percentage of correct classification, %lf \n", countcorrect * 100.0/ X.row );
     return ;
 }
 
@@ -252,6 +230,8 @@ pair<double,double> get_mean_std (vector<double>& v)
     
     std /= v.size ();
     
+    std = sqrt (std);
+    
     return pair<double,double> (mean, std) ;
 }
 
@@ -263,12 +243,17 @@ void normalize (Matrix<Object>& X)
     for (int j = 0;j < X.row; j++)
     {
         pair<double, double> ms = get_mean_std (X.entries[j]);
-        //remove the below two lines if normal distribution is to be used
-        ms.first = 0;
-        ms.second = maxVAL;
+        double mn = 1e50;
+        double mx = -1e50;
         
+        for (int i = 0;i < X.col; i++)
+            mn = min (mn, X.entries[j][i]);
+                
+        for (int i = 0;i < X.col; i++)
+            mx = max (mx, X.entries[j][i]);
+
         for (int i = 0; i < X.col; i++)
-            X.entries[j][i] = (X.entries[j][i] - ms.first) / ms.second;
+            X.entries[j][i] = (X.entries[j][i] - mn) / (mx-mn);
     }
     
     return ;
@@ -299,109 +284,57 @@ void gradient_descent (int m, int k, int n, double eta, double lambda, Matrix<do
         
         //O(nk)
         //number of ell values is m (the number of training examples)
-        
-        
-        for (int j = 0; j + 1 < numKlass; j ++)
+       
+        for (int ell = 0 ; ell < m; ell++)
         {
-            double denom = 0;
-            
             int maxID = 0;
-            for (int ell = 0; ell < m; ell++)
-                if (xW[j].vec[ell].second > xW[j].vec[maxID].second)
-                    maxID = ell;
+            for (int j = 0; j + 1 < numKlass; j++)
+                if (xW[j].vec[ell].second > xW[maxID].vec[ell].second)
+                    maxID = j;
             
-            swap (xW[j].vec[maxID], xW[j].vec[0]);
+            double denom = 1;
             
-            for (int ell = 0; ell < m; ell++)
-                    denom = denom + exp (xW[j].vec[ell].second - xW[j].vec[0].second);
+            swap (xW[maxID].vec[ell], xW[0].vec[ell]);
             
-            double denom2 = 1.0/exp(xW[j].vec[0].second);
+            for (int j = 1; j + 1 < numKlass; j ++)
+                denom = denom + exp (xW[j].vec[ell].second - xW[0].vec[ell].second);
             
-            prob.entries[j][0] = 1.0/(denom + denom2);
+            double denom2 = 1.0/exp (xW[0].vec[ell].second);
             
-         //   cout << prob.entries[j][0] << " " << j << " max "<<denom<<" " <<denom2<<" "<<xW[j].vec[0].second<<endl;
+            prob.entries[0][ell] = 1.0 / (denom + denom2);
             
-            //denominator changed to log
             denom = log (denom);
-
-            for (int ell = 1; ell < m; ell++)
-            {
-                denom = denom + (xW[j].vec[ell-1].second - xW[j].vec[ell].second);
-                
-                denom2 = 1.0/exp(xW[j].vec[ell].second);
-                prob.entries[j][ell] = 1.0/(exp(denom) + denom2);
-            }
-           
-         //   cout << prob.entries[j][5] << " " << j << " max2 "<<denom<<" " <<denom2<<" "<<xW[j].vec[5].second<<endl;
-           
             
-            swap (xW[j].vec[maxID], xW[j].vec[0]);
-            swap (prob.entries[j][maxID], prob.entries[j][0]);
-        }
-        
-        //O(km)
-        
-        for (int ell = 0; ell < m; ell++)
-        {
+            for (int j = 1; j + 1 < numKlass; j ++)
+            {
+                denom = denom + (xW[j-1].vec[ell].second - xW[j].vec[ell].second);
+                denom2 = 1.0 / (exp(xW[j].vec[ell].second));
+                
+                prob.entries[j][ell] = 1.0/ (exp(denom) + denom2);
+            }
+            
+            swap (xW[maxID].vec[ell], xW[0].vec[ell]);
+            swap (prob.entries[maxID][ell], prob.entries[0][ell]);
+          
             double sum = 0;
             for (int j = 0;j + 1< numKlass; j ++)
                 sum = sum + prob.entries[j][ell];
             
-            prob.entries[numKlass-1][ell] = 1 - sum;
+            prob.entries[numKlass-1][ell] = abs(1 - sum);
         }
-        
         //O(km)
-        
-        if (iter == 0){
-        /*    cout <<"Probabilities ";
-            for (int j = 0;j < numKlass; j++)
-                cout << prob.entries[j][20] << " ";
-            cout <<"Weights and vectors ";
-            for (int ell = 0; ell < min(m,100); ell ++)
-                cout <<weights.entries[10][ell]<< " " << xW[15].vec[ell].second<< endl;
-            cout << endl; */
-        }
-           
         
         for (int j = 0;j < numKlass; j ++)
         {
             for (int idx = 0; idx < weights.col ; idx ++)
                 weights.entries[j][idx] = weights.entries[j][idx] - eta * weights.entries[j][idx] * lambda;
-            
-            double deltaprobsum = 0;
-            for (int ell = 0; ell < m; ell ++)
-            {
-                double mean = 0, std = 1;
-                if (NORMALIZED)
-                {
-                    mean = X.entries[ell][0].first ;
-                    std = X.entries[ell][0].second ;
-                }
-                deltaprobsum = deltaprobsum + (delta.entries[j][ell] - prob.entries[j][ell]) * (-mean/std) * NORMALIZED;
-            }
-            
-            //maybe divide by m in addition to lambda to manage overfitting
-            deltaprobsum = deltaprobsum * eta ;
-            
-            for (int idx = 0; idx < weights.col; idx ++)
-                weights.entries[j][idx] = weights.entries[j][idx] + deltaprobsum;
-            
+    
             for (int ell = 0; ell < m; ell ++)
             {
                 for (int idx = 0; idx < X.entries[ell].size(); idx ++)
                 {
                     double Xiell = X.entries[ell][idx].second ;
-                    double adjustment = 0 ;
                     weights.entries[j][ X.entries[ell][idx].first ] = weights.entries[j][ X.entries[ell][idx].first ] + eta * Xiell * (delta.entries[j][ell] - prob.entries[j][ell]) ;
-                    if (NORMALIZED)
-                    {
-                        double mean = 0, std = 1;
-                        mean = X.entries[ell][0].first ;
-                        std = X.entries[ell][0].second ;
-                        
-                        adjustment = (delta.entries[j][ell] - prob.entries[j][ell]) * (mean/std) * NORMALIZED * eta;
-                        weights.entries[j][ X.entries[ell][idx].first ] += adjustment;
-                    }
                 }
             }
             
@@ -409,9 +342,15 @@ void gradient_descent (int m, int k, int n, double eta, double lambda, Matrix<do
             //O(km + total valid entry)
         }
         
-      //  if (iter % 5 == 0)
-      //      normalize (weights);
-      //  cout<<"Weights look like "<<weights.entries[0][0]<<" "<<weights.entries[0][weights.col - 1]<<endl;
+        cout<<"Weights look like ";
+       
+        for (int j = 0 ; j < 5; j ++)
+            cout<<weights.entries[0][j]<<" ";
+        
+        for (int j = 0 ; j < 5; j ++)
+            cout<<weights.entries[0][weights.col - j - 1]<<" ";
+        
+        cout << endl;
         
         cout <<"Running iteration "<<iter<<endl;
         print_log_likelihood (Y,weights,X, prob, classification, lambda, xW);
@@ -467,38 +406,10 @@ void test_code_matrix ()
 template<class Object>
 void normalize (sparseMatrix<Object>& X)
 {
-    double mean = 0, std = 1;
-    
-    //for (int j = 0;j < X.entries[0].size(); j ++)
-      //  X.entries[0][j].second = (X.entries[0][j].second - mean) / std;
-    
     for (int ell = 0; ell < X.row; ell++)
     {
-        mean = 0 ;
-        
-        for (int j = 0;j < X.entries[ell].size (); j ++)
-            mean = mean + X.entries[ell][j].second ;
-        
-        mean = mean / 61189;
-        
-        std = 0;
-        
-        for (int j = 0;j < X.entries[ell].size (); j ++)
-            std = std + (X.entries[ell][j].second - mean) * (X.entries[ell][j].second - mean);
-        
-        int valentries = X.entries[ell].size ();
-        
-        std = std + (61189 - valentries) * mean * mean;
-        std = std / 61189;
-        std = sqrt (std);
-        
-        for (int j = 0;j < X.entries[ell].size(); j ++)
-            X.entries[ell][j].second = (X.entries[ell][j].second - mean) / std;
-        
-        X.entries[ell][0].first = mean;
-        X.entries[ell][1].second = std;
-        
-        cout << mean <<  " " << std << endl;
+        for (int j = 1;j < X.entries[ell].size(); j ++)
+            X.entries[ell][j].second = (X.entries[ell][j].second - minVal[X.entries[ell][j].first]) / (maxVAL[X.entries[ell][j].first] - minVal[X.entries[ell][j].first]);
     }
     
     return ;
@@ -646,7 +557,7 @@ void take_training_input ()
     vector<int> docIds;
     vector<double> docClass;
     
-    while (fgets (buffer, MAXSTR, in) && M.size () < 50){ //take the first 50 documents
+    while (fgets (buffer, MAXSTR, in) && M.size () < 400){ //take the first 50 documents
         char *token = strtok (buffer, ",");
         int idx = 0;
         while (token)
@@ -658,12 +569,16 @@ void take_training_input ()
         }
         
         vector<Pair> columnVec ;
-        columnVec.push_back (Pair(0,1));
+        columnVec.push_back (Pair(0,1.0/600));
+        minVal[0] = 0;
         docIds.push_back (values[0].second);
         for (int j = 1;j + 1 < values.size (); j ++)
         {
+            maxVAL[j] = max (maxVAL[j], values[j].second * 1.0);
+            minVal[j] = min (minVal[j], values[j].second * 1.0);
+          
             if (values[j].second)
-                columnVec.push_back (Pair (j+1,values[j].second));
+                columnVec.push_back (Pair (j,values[j].second));
         }
         
         docClass.push_back (columnVec.back().second);
@@ -691,7 +606,7 @@ void take_training_input ()
     
     fclose (in);
     
-    normal_distribution<double> gaussian (0.0, 1);
+    normal_distribution<double> gaussian (0.0, (1/lambda));
     
     for (int i = 0;i < k; i ++)
         for (int j = 0;j <= n; j ++)

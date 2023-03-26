@@ -81,7 +81,7 @@ def top_n_words_with_mi(mi_series, vocab, n=100):
 
     
 # Specify path to training data
-file = "../training.csv"
+file = "training.csv"
 
 # Use pandas to read the CSV file into a dataframe
 df = pd.read_csv(file,header=None)
@@ -92,11 +92,11 @@ training_data = df.sample(frac=0.90)
 # Use 10% for testing
 #Swap comments if running validation
 test_data = df.drop(training_data.index)
-#test_data = pd.read_csv("../testing.csv",header=None)
+#test_data = pd.read_csv("testing.csv",header=None)
 #test_data.drop(columns=test_data.columns[0], axis=1, inplace=True)
 
 #Train classifier on training data
-classifier_pxiyk, classifier_pyk = train_naive_bayes(training_data, "../vocabulary.txt")
+classifier_pxiyk, classifier_pyk = train_naive_bayes(training_data, "vocabulary.txt")
 #Make predictions
 predictions = classify_naive_bayes(test_data, classifier_pxiyk, classifier_pyk)
 
@@ -112,7 +112,7 @@ with open("predictions.txt", "w") as f:
 mutual_info = calc_mi(classifier_pxiyk,classifier_pyk)
 print(mutual_info)
 
-vocab_file = "../vocabulary.txt"
+vocab_file = "vocabulary.txt"
 vocab = load_vocabulary(vocab_file)
 
 top_100_words = top_n_words_with_mi(mutual_info, vocab, n=100)
@@ -130,7 +130,7 @@ b = [1,0.1,0.01,0.001,0.0001,0.00001]
 b.reverse()
 accuracy = []
 for n in b:
-    classifier_pxiyk, classifier_pyk = train_naive_bayes(training_data, "../vocabulary.txt", beta_prior=n)
+    classifier_pxiyk, classifier_pyk = train_naive_bayes(training_data, "vocabulary.txt", beta_prior=n)
     predictions = classify_naive_bayes(test_data, classifier_pxiyk, classifier_pyk)
     acc = calc_accuracy(test_data, predictions)
     accuracy.append(acc)

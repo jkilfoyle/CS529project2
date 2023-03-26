@@ -12,25 +12,30 @@
 using namespace std;
 
 const int MAXSTR = 1000000;
-const int NORMALIZED = 1 ;
+const int NORMALIZED = 1 ;          //swtiches on normalization of columns
 const int N = 61189;
-vector<double> maxVAL (N, 700);
+vector<double> maxVAL (N, 700);       //normalization constant of each column
 vector<double> minVal (N, 0);
-double topaccuracy = 0;
+double topaccuracy = 0;             //accuracy percentage of classification
 
 typedef pair<int,double> Pair;
 
 
+//some random variable generators
 default_random_engine generator;
 uniform_real_distribution<double> distribution (0, 1);
 normal_distribution<double> normal (0.0, 1);
 
+//word and label identifiers
 map<string, int> wordids;
 map<string, int> labelids;
 
 
+/*
+ Computes the inner product between two sparse vectors A and B.
+ */
 template<class Object>
-double fast_product_sum (vector<Object>& A, vector<Object>& B, double totalA)
+double fast_product_sum (vector<Object>& A, vector<Object>& B)
 {
     double sum = 0;
     int j = 0;
@@ -44,18 +49,22 @@ double fast_product_sum (vector<Object>& A, vector<Object>& B, double totalA)
     return sum ;
 }
 
+
+/*
+ Class describing a sparse Matrix i.e. most of the entries that are zero are discarded.
+ */
 template<class Object>
 class sparseMatrix{
 public:
     int row, col;
     vector<vector<Object> > entries;
-    sparseMatrix(int m, int n)
+    sparseMatrix(int m, int n) //constructor
     {
         row = m;
         col = n;
         entries = vector<vector<Object> > (row);
     }
-    sparseMatrix(vector<vector<Object> >& M)
+    sparseMatrix(vector<vector<Object> >& M) //constructor with the sparse matrix M.
     {
         row = M.size ();
         col = M[0].size ();
@@ -68,7 +77,10 @@ public:
     }
 };
 
-
+/*
+ A matrix class addition, substraction and multiplication operator builtin. Note that
+ this is NOT a sparse matrix.
+ */
 template<class Object>
 class Matrix{
 public:
@@ -132,6 +144,11 @@ public:
     }
 };
 
+
+/*
+ Sparse Vector (i.e. most entries are zero) class that features fast inner product
+ and product between itself and a sparseMatrix.
+ */
 template<class Object>
 class fastVector
 {
@@ -148,16 +165,14 @@ public:
         len = V.size() ;
         vec = V;
     }
-    fastVector operator*(const sparseMatrix<Object>& M)
+    fastVector operator*(const sparseMatrix<Object>& M) //computes the product between vector and a sparse Matrix.
     {
         vector<Object> nextvec (M.row);
-        double totalA = 0;
-        for (int i = 0;i < len; i ++)
-            totalA = totalA + vec[i].second;
+        
         for (int i = 0;i < M.row; i ++)
         {
             vector<Object> rowvec = M.entries[i];
-            double val = fast_product_sum<Object> (vec, rowvec, totalA);
+            double val = fast_product_sum<Object> (vec, rowvec);
             nextvec[i] = Pair (i, val);
         }
         return nextvec;
@@ -165,6 +180,9 @@ public:
 };
 
 /*
+ 
+some variable notations with dimensions as specified in assignment description.
+ 
 sparseMatrix<Pair> delta (k,m);
 sparseMatrix<Pair> X (m, n + 1);
 vector<double> Y (m);
@@ -172,18 +190,9 @@ Matrix<double> weights (k, n + 1);
 Matrix<double> probability (k,m);
 */
 
-double normsq (vector<double>& w)
-{
-    double norm = 0;
-    for (auto weight : w)
-        norm = norm + weight * weight;
-    
-    return norm;
-}
+//prints out the percentage of correctly classified instances.
 
-//prints out the value of the function being optimized and the document classifications.
-
-double print_log_likelihood (vector<double> Y, Matrix<double> weights, sparseMatrix<Pair> X, Matrix<double> prob, vector<pair<int,int> >& classification, double lambda,
+double print_classified_accuracy (vector<double> Y, Matrix<double> weights, sparseMatrix<Pair> X, Matrix<double> prob, vector<pair<int,int> >& classification, double lambda,
                            vector<fastVector<Pair> > xW)
 {
     classification.erase (classification.begin(), classification.end());
@@ -196,124 +205,99 @@ double print_log_likelihood (vector<double> Y, Matrix<double> weights, sparseMat
     for (int ell = 0; ell < X.row; ell ++)
     {
         int klass = 0;
+        
+        /*
+         Goes over the entire range of classes for a document
+         and selects the one with highest probability
+         */
         for (int j  = 0; j < numKlass; j ++)
         {
             if (prob.entries[j][ell] > prob.entries[klass][ell])
                 klass = j ;
         }
-       // cout <<"Example " << ell << " is classified to be " <<klass<<endl;
         classification.push_back (pair<int,int> (ell, klass));
         
+        
+        //some debugging output
         if (ell < 5)
             cout << prob.entries[klass][ell]<<" ";
         if (abs(klass - Y[ell]) < 1e-9)
             countcorrect ++;
     }
     
+    //prints out the correct classification percentage or accuracy and then returns it.
     printf ("\n Percentage of correct classification, %lf \n\n\n\n", countcorrect * 100.0/ X.row );
     return countcorrect * 100.0 / X.row;
-}
-
-pair<double,double> get_mean_std (vector<double>& v)
-{
-    double mean = 0;
-    
-    for (auto val : v)
-        mean = mean + val;
-    
-    mean /= v.size ();
-    
-    double std = 0;
-    
-    for (auto val : v)
-        std = std + (val - mean) * (val - mean);
-    
-    std /= v.size ();
-    
-    std = sqrt (std);
-    
-    return pair<double,double> (mean, std) ;
-}
-
-
-template<class Object>
-void normalize (Matrix<Object>& X)
-{
-  
-    for (int j = 0;j < X.row; j++)
-    {
-        pair<double, double> ms = get_mean_std (X.entries[j]);
-        double mn = 1e50;
-        double mx = -1e50;
-        
-        for (int i = 0;i < X.col; i++)
-            mn = min (mn, X.entries[j][i]);
-                
-        for (int i = 0;i < X.col; i++)
-            mx = max (mx, X.entries[j][i]);
-
-        for (int i = 0; i < X.col; i++)
-            X.entries[j][i] = (X.entries[j][i] - mn) / (mx-mn);
-    }
-    
-    return ;
 }
 
 
 Matrix<double> gradient_descent (int& m, int& k, int& n, double& eta, double& lambda, Matrix<double>& delta, sparseMatrix<Pair>& X, vector<double>& Y,
                        Matrix<double>& weights, Matrix<double>& prob)
 {
-    int iterations = 10000; //number of iterations of gradient descent
-    Matrix<double> bestWeights (weights.entries);
+    int iterations = 100000; //number of iterations of gradient descent
+    Matrix<double> bestWeights (weights.entries); //stores the best set of weights found so far.
     
-    vector<pair<int,int> > classification;
+    vector<pair<int,int> > classification; //stores the classification predicted in the last iteration
     
     for (int iter = 0; iter < iterations; iter ++)
     {
-        int numKlass = weights.row ;
-        vector<fastVector<Pair> > xW;
+        int numKlass = weights.row ; //number of classes
+        vector<fastVector<Pair> > xW; //W * X as defined in the assignment
         for (int j = 0;j < numKlass; j ++)
         {
-            fastVector<Pair> fastweight (weights.col);
+            fastVector<Pair> fastweight (weights.col); //loads the sparse vector from a row of the weight matrix W.
             for (int idx = 0; idx < weights.col; idx ++)
                 fastweight.vec[idx] = Pair(idx,weights.entries[j][idx]);
             
+            //computes the product of w * X (both are sparse), then stores it in the variable "xW".
             fastVector<Pair> wiXi = fastweight * X ;
-            
             xW.push_back (wiXi);
         }
         
-        //O(nk)
+        //O(nk) is the time complexity.
         //number of ell values is m (the number of training examples)
        
+        /*
+         Computation of probabilities
+         */
         for (int ell = 0 ; ell < m; ell++)
         {
             int maxID = 0;
+            /*
+             Finds the class with highest value of w * X. We do it so that the exponential values are within numerical range.
+             */
             for (int j = 0; j + 1 < numKlass; j++)
                 if (xW[j].vec[ell].second > xW[maxID].vec[ell].second)
                     maxID = j;
             
             double denom = 1;
+            //computes the denominator of probability equation below
             
             swap (xW[maxID].vec[ell], xW[0].vec[ell]);
             
+            //denominator calculation for the first class here.
             for (int j = 1; j + 1 < numKlass; j ++)
                 denom = denom + exp (xW[j].vec[ell].second - xW[0].vec[ell].second);
             
+            //next divide the numerator on both top and bottom.
             double denom2 = 1.0/exp (xW[0].vec[ell].second);
             
+            //probability of first class with row ell
             prob.entries[0][ell] = 1.0 / (denom + denom2);
             
+            //take log
             denom = log (denom);
             
             for (int j = 1; j + 1 < numKlass; j ++)
             {
+                //update the denominator
                 denom = denom + (xW[j-1].vec[ell].second - xW[j].vec[ell].second);
                 denom2 = 1.0 / (exp(xW[j].vec[ell].second));
-                
+                //probability of class j with row ell
                 prob.entries[j][ell] = 1.0/ (exp(denom) + denom2);
             }
             
+            //swap things back
             swap (xW[maxID].vec[ell], xW[0].vec[ell]);
             swap (prob.entries[maxID][ell], prob.entries[0][ell]);
           
@@ -321,14 +305,17 @@ Matrix<double> gradient_descent (int& m, int& k, int& n, double& eta, double& la
             for (int j = 0;j + 1< numKlass; j ++)
                 sum = sum + prob.entries[j][ell];
             
+            //substract the rest to get the last class.
             prob.entries[numKlass-1][ell] = abs(1 - sum);
         }
-        //O(km)
+        //O(km) time complexity
         
         
         cout <<"Running iteration "<<iter<<endl;
-        double accuracy = print_log_likelihood (Y,weights,X, prob, classification, lambda, xW);
-        if (accuracy > topaccuracy && accuracy > 80)
+        
+        //gets accuracy and updates the bestweights.
+        double accuracy = print_classified_accuracy (Y,weights,X, prob, classification, lambda, xW);
+        if (accuracy > topaccuracy)
         {
             bestWeights = weights;
             topaccuracy = accuracy;
@@ -336,9 +323,11 @@ Matrix<double> gradient_descent (int& m, int& k, int& n, double& eta, double& la
     
         for (int j = 0;j < numKlass; j ++)
         {
+            //updates weight with the penalty term.
             for (int idx = 0; idx < weights.col ; idx ++)
                 weights.entries[j][idx] = weights.entries[j][idx] - eta * weights.entries[j][idx] * lambda;
     
+            //runs over all rows to update weight values according to equation (29) in CMU notes.
             for (int ell = 0; ell < m; ell ++)
             {
                 for (int idx = 0; idx < X.entries[ell].size(); idx ++)
@@ -348,10 +337,10 @@ Matrix<double> gradient_descent (int& m, int& k, int& n, double& eta, double& la
                 }
             }
             
-            
             //O(km + total valid entry)
         }
         
+        //some debugging output
         cout<<"Weights look like ";
                
         for (int j = 0 ; j < 5; j ++)
@@ -363,10 +352,12 @@ Matrix<double> gradient_descent (int& m, int& k, int& n, double& eta, double& la
         cout << endl;
     }
     
+    //returns bestweights.
+    
     return bestWeights ;
 }
 
-
+//debug code
 template<class Object>
 void print_out (const Matrix<Object>& M)
 {
@@ -381,6 +372,8 @@ void print_out (const Matrix<Object>& M)
     return ;
 }
 
+
+//debug code
 void test_code_matrix ()
 {
     Matrix<double> M1 (2,2);
@@ -405,11 +398,13 @@ void test_code_matrix ()
 
 
 /*
- 
+
+ referred this document at some point
  https://stackoverflow.com/questions/35419882/cost-function-in-logistic-regression-gives-nan-as-a-result
  
  */
 
+//normalizes a sparseMatrix according to columns
 template<class Object>
 void normalize (sparseMatrix<Object>& X)
 {
@@ -422,52 +417,7 @@ void normalize (sparseMatrix<Object>& X)
     return ;
 }
 
-
-
-template<class Object, class Object2>
-void initialize_weights (sparseMatrix<Object>& X, Matrix<Object2>& weights, vector<double>& Y)
-{
-    double mean = 0, std = 1;
-    
-    //for (int j = 0;j < X.entries[0].size(); j ++)
-      //  X.entries[0][j].second = (X.entries[0][j].second - mean) / std;
-    
-      for (int i = 0;i < 20; i ++)
-          for (int j = 0;j < X.col; j ++)
-              weights.entries[i][j] = distribution (generator);
-    
-    for (int ell = 0; ell < X.row; ell++)
-    {
-        mean = 0 ;
-        
-        for (int j = 0;j < X.entries[ell].size (); j ++)
-            mean = mean + X.entries[ell][j].second ;
-        
-        mean = mean / 61189;
-        
-        std = 0;
-        
-        for (int j = 0;j < X.entries[ell].size (); j ++)
-            std = std + (X.entries[ell][j].second - mean) * (X.entries[ell][j].second - mean);
-        
-        int valentries = X.entries[ell].size ();
-        
-        std = std + (61189 - valentries) * mean * mean;
-        std = std / 61189;
-        std = sqrt (std);
-        
-        normal_distribution<double> gaussian (mean, std);
-        
-        for (int j = 0; j < X.col; j++)
-        {
-            weights.entries[(int)Y[ell]][j] = gaussian (generator);
-        }
-    }
-    
-    return ;
-}
-
-
+//debug code
 template<class Object>
 void print_fastVector (fastVector<Object>& weights)
 {
@@ -479,6 +429,8 @@ void print_fastVector (fastVector<Object>& weights)
     return ;
 }
 
+
+//debug code
 void test_code_sparseMatrix ()
 {
     int m = 2;
@@ -504,6 +456,7 @@ void test_code_sparseMatrix ()
     return ;
 }
 
+//takes the input of labels and stores in labelids
 void take_label_input ()
 {
     FILE *in = fopen ("newsgrouplabels.txt", "r");
@@ -526,6 +479,8 @@ void take_label_input ()
     return ;
 }
 
+//takes the input of words and stores in wordids
+
 void take_word_input ()
 {
     FILE *in = fopen ("vocabulary.txt", "r");
@@ -546,23 +501,25 @@ void take_word_input ()
     return ;
 }
 
+//runs the test data.
+
 void run_test_data (int m, int k, int n, double eta, double lambda, Matrix<double> delta, sparseMatrix<Pair> X, vector<double> Y,
                        Matrix<double> weights, Matrix<double> prob)
 {
-    FILE *in = fopen ("training.csv","r");
+    FILE *in = fopen ("testing.csv","r");
     
-    char buffer[MAXSTR];
+    char buffer[MAXSTR]; //FILE buffer
     vector<Pair> values ;
     vector<vector<Pair> > M;
     vector<int> docIds;
     vector<int> docClass;
     
-    while (fgets (buffer, MAXSTR, in)){ //take the first 50 documents
+    while (fgets (buffer, MAXSTR, in)){ //line by line input taken into buffer.
         char *token = strtok (buffer, ",");
         int idx = 0;
         while (token)
         {
-            int num = atoi (token);
+            int num = atoi (token); //each number tokenized in the variable num
             values.push_back (Pair (idx ++ , num));
             
             token = strtok (NULL, ",");
@@ -571,17 +528,17 @@ void run_test_data (int m, int k, int n, double eta, double lambda, Matrix<doubl
         vector<Pair> columnVec ;
         columnVec.push_back (Pair(0,1.0));
         minVal[0] = 0;
-        docIds.push_back (values[0].second);
+        docIds.push_back (values[0].second); //first value is document ID
         for (int j = 1;j < values.size (); j ++)
         {
-            maxVAL[j] = max (maxVAL[j], values[j].second * 1.0);
-            minVal[j] = min (minVal[j], values[j].second * 1.0);
+            maxVAL[j] = max (maxVAL[j], values[j].second * 1.0); //column max
+            minVal[j] = min (minVal[j], values[j].second * 1.0); //column min
           
             if (values[j].second)
-                columnVec.push_back (Pair (j,values[j].second));
+                columnVec.push_back (Pair (j,values[j].second)); //adds the value of sparse vector if it is non-zero
         }
         
-        M.push_back (columnVec);
+        M.push_back (columnVec); //adds the row to matrix.
         values.erase (values.begin(), values.end());
         
        // cout << idx << endl;
@@ -597,11 +554,10 @@ void run_test_data (int m, int k, int n, double eta, double lambda, Matrix<doubl
     Matrix<double> probability (k,m);
     */
     
-    sparseMatrix<Pair> testX (M);
+    sparseMatrix<Pair> testX (M); //initializes test matrix X.
     
     fclose (in);
-    
-    
+
     int totalvalidentries = 0;
     
     for (int i = 0 ;i < m; i ++)
@@ -613,9 +569,11 @@ void run_test_data (int m, int k, int n, double eta, double lambda, Matrix<doubl
     cout << "total number of valid entries is " << totalvalidentries << endl;
 
     //initialize_weights <Pair, double> (X,weights,Y);
-    if (NORMALIZED)
+    if (NORMALIZED) //normalizes if 1
         normalize (testX);
     
+    
+    //means the same as the gradient descent function except it runs on test matrix "TestX".
     int numKlass = weights.row ;
     vector<fastVector<Pair> > xW;
     for (int j = 0;j < numKlass; j ++)
@@ -632,6 +590,8 @@ void run_test_data (int m, int k, int n, double eta, double lambda, Matrix<doubl
     //O(nk)
     //number of ell values is m (the number of training examples)
    
+    //computes the probabilities with the weights found in training via same method inside gradient descent iterations.
+    
     for (int ell = 0 ; ell < m; ell++)
     {
         int maxID = 0;
@@ -674,6 +634,8 @@ void run_test_data (int m, int k, int n, double eta, double lambda, Matrix<doubl
     FILE *out = fopen("classification.csv","w");
     int countcorrect = 0;
     
+    //classifies according to the highest probability.
+    
     for (int ell = 0; ell < testX.row; ell ++)
     {
         int klass = 0;
@@ -683,13 +645,13 @@ void run_test_data (int m, int k, int n, double eta, double lambda, Matrix<doubl
         
         docClass.push_back (klass);
         
-        if (abs (klass - Y[ell]) < 1e-9)
-            countcorrect ++;
+      //  if (abs (klass - Y[ell]) < 1e-9)
+        //    countcorrect ++;
         
         fprintf (out, "%d, %d\n", docIds[ell], klass);
     }
     
-    cout <<"Percentage "<< countcorrect * 100.0/testX.row << endl;
+  //  cout <<"Percentage "<< countcorrect * 100.0/testX.row << endl;
     
     fclose (out);
     
@@ -697,14 +659,12 @@ void run_test_data (int m, int k, int n, double eta, double lambda, Matrix<doubl
 }
 
 
-void print_confusion_matrix (vector<double> Y, Matrix<double> weights, sparseMatrix<Pair> X, Matrix<double> prob, double lambda, vector<int> docClass)
+void print_confusion_matrix (vector<double> Y, Matrix<double> weights, sparseMatrix<Pair> X, Matrix<double> prob, double lambda, vector<double> docClass)
 {
     FILE *out = fopen ("confusion_matrix.txt", "w");
     int numKlass = weights.row ;
     int countcorrect = 0;
     vector<vector<int> > C (20, vector<int> (20,0));
-    
-    cout << "First few probabilities ";
     
     for (int ell = 0; ell < X.row; ell ++)
     {
@@ -712,6 +672,8 @@ void print_confusion_matrix (vector<double> Y, Matrix<double> weights, sparseMat
         for (int j  = 0; j < numKlass; j ++)
             if (prob.entries[j][ell] > prob.entries[klass][ell])
                 klass = j ;
+        
+        //finds the class of document ell and adds the counter if there is confusion.
         C[klass][docClass[ell]]++;
     }
     
@@ -744,12 +706,12 @@ void take_training_input_then_test ()
     vector<int> docIds;
     vector<double> docClass;
     
-    while (fgets (buffer, MAXSTR, in) && M.size () < 1000){ //take the first 50 documents
+    while (fgets (buffer, MAXSTR, in) && M.size () < 1000){ //line by line input taken into buffer.
         char *token = strtok (buffer, ",");
         int idx = 0;
         while (token)
         {
-            int num = atoi (token);
+            int num = atoi (token); //each number tokenized in the variable num
             values.push_back (Pair (idx ++ , num));
             
             token = strtok (NULL, ",");
@@ -759,17 +721,17 @@ void take_training_input_then_test ()
         columnVec.push_back (Pair(0,1.0));
         minVal[0] = 0;
         maxVAL[0] = maxVAL[1];
-        docIds.push_back (values[0].second);
+        docIds.push_back (values[0].second); //first value is document ID
         for (int j = 1;j + 1 < values.size (); j ++)
         {
-            maxVAL[j] = max (maxVAL[j], values[j].second * 1.0);
-            minVal[j] = min (minVal[j], values[j].second * 1.0);
+            maxVAL[j] = max (maxVAL[j], values[j].second * 1.0); //column Max
+            minVal[j] = min (minVal[j], values[j].second * 1.0); //column Min
           
             if (values[j].second)
-                columnVec.push_back (Pair (j,values[j].second));
+                columnVec.push_back (Pair (j,values[j].second)); //non-zero values entered to sparse Matrix
         }
         
-        docClass.push_back (values.back().second);
+        docClass.push_back (values.back().second); //last value is the class of training document.
         M.push_back (columnVec);
         values.erase (values.begin(), values.end());
         
@@ -785,7 +747,7 @@ void take_training_input_then_test ()
     Matrix<double> weights (k, n + 1);
     Matrix<double> probability (k,m);
     */
-    
+    //initialize data as below with notations defined in assignment
     Matrix<double> delta (k,m);
     sparseMatrix<Pair> X (M);
     vector<double> Y (docClass);
@@ -794,11 +756,11 @@ void take_training_input_then_test ()
     
     fclose (in);
     
-    normal_distribution<double> gaussian (0.0, 100);
+    normal_distribution<double> gaussian (0.0, 1); //a normal distribution
     
     for (int i = 0;i < k; i ++)
         for (int j = 0;j <= n; j ++)
-            weights.entries[i][j] = 0;
+            weights.entries[i][j] = gaussian (generator); //weights initialized according the gaussian above.
     
     int totalvalidentries = 0;
     
@@ -810,6 +772,7 @@ void take_training_input_then_test ()
     
     cout << "total number of valid entries is " << totalvalidentries << endl;
 
+    //initialize delta.
     for (int yj = 0;yj < k; yj++)
     {
         for (int ell = 0; ell < m; ell++)

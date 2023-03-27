@@ -1,4 +1,4 @@
-# CS529_project2
+# CS529 Project 2
 
 
 

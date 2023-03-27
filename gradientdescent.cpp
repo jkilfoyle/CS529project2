@@ -1,3 +1,12 @@
+/*
+Naive Bayes Implementation
+CS529 Project 2
+Jeb Kilfoyle
+Abir Islam
+
+Implementation of Logistic Regression classifier.
+*/
+
 #include <map>
 #include <cmath>
 #include <vector>

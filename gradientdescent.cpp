@@ -706,7 +706,7 @@ void take_training_input_then_test ()
     vector<int> docIds;
     vector<double> docClass;
     
-    while (fgets (buffer, MAXSTR, in) && M.size () < 1000){ //line by line input taken into buffer.
+    while (fgets (buffer, MAXSTR, in)){ //line by line input taken into buffer.
         char *token = strtok (buffer, ",");
         int idx = 0;
         while (token)

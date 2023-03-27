@@ -48,12 +48,32 @@ def classify_naive_bayes(test_data, classifier_pxiyk, classifier_pyk):
 
     return predictions
 
+"""
 #Calculates the accuracy of predictions on test_data
 def calc_accuracy(test_data, predictions):
     correct = (test_data.iloc[:, -1].values == predictions).sum()
     n = len(predictions)
     return correct / n if n > 0 else 0
+"""
+
+#calculates accuracy by summing across confusion matrix
+def calc_accuracy(confusion_matrix):
+    correct = np.trace(confusion_matrix)
+    total = confusion_matrix.sum().sum()
+    return correct / total if total > 0 else 0
+
+#Calculates Confusion Matrix
+def calc_confusion_matrix(test_data, predictions):
+    true_labels = test_data.iloc[:, -1].values
+    labels = np.unique(true_labels)
+    cm = pd.DataFrame(data=0, columns=labels, index=labels)
     
+    for true_label, pred_label in zip(true_labels, predictions):
+        cm.at[true_label, pred_label] += 1
+
+    return cm
+
+
 #Calculates the mutual information between each word X_i and Y
 #classifier_pxiyk a pandas frame why row j, column i is P(X_i|Y_j)
 #classifier_pyk a pandas series with P(Y_k), index is k
@@ -121,7 +141,14 @@ for word, mi_score in top_100_words:
     print(f"{word}: {mi_score}")
     
     
-print("Accuracy, beta=1/v: ", calc_accuracy(test_data, predictions))
+# Calculate confusion matrix
+confusion_matrix = calc_confusion_matrix(test_data, predictions)
+print("Confusion Matrix:")
+print(confusion_matrix)
+
+# Calculate accuracy
+accuracy = calc_accuracy(confusion_matrix)
+print("Accuracy, beta=1/v: ", accuracy)
 
 
 #Uncomment to try range of Beta values and plot.
@@ -132,9 +159,14 @@ accuracy = []
 for n in b:
     classifier_pxiyk, classifier_pyk = train_naive_bayes(training_data, "vocabulary.txt", beta_prior=n)
     predictions = classify_naive_bayes(test_data, classifier_pxiyk, classifier_pyk)
-    acc = calc_accuracy(test_data, predictions)
-    accuracy.append(acc)
-    print("Accuracy, beta=", n,": ", acc)
+    # Calculate confusion matrix
+    confusion_matrix = calc_confusion_matrix(test_data, predictions)
+    print("Confusion Matrix:")
+    print(confusion_matrix)
+
+    # Calculate accuracy
+    accuracy = calc_accuracy(confusion_matrix)
+    print("Accuracy, beta=", n, ": ", accuracy)
 # Create a plot
 plt.plot(b, accuracy, marker='o')
 
